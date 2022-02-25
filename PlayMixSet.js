@@ -14,43 +14,19 @@ import {useDatabase} from './DatabaseContext'
 import { FlingGestureHandler, Directions} from 'react-native-gesture-handler';
 import { Animated } from 'react-native';
 
-export default function PlaySet({navigation, route}) {
-    const {setID, setName, setSession} = route.params;
+export default function PlayMixSet({navigation, route}) {
+    const {setID} = route.params;
     const db = useDatabase();
     const [cards, setCards] = useState();
     const [curCard, setCurCard] = useState(null);
     const [nextCard, setNextCard] = useState(null);
     const [flip, setFlip] = useState(false)
     const [offsetX, setOffsetX] = useState(new Animated.Value(0))
-    const [flagged, toggleFlagged] = useState(false)
 
-    const boxes = [[1,3,6,10], [2,4,7,1], [3,5,8,2], [4,6,9,3], [5,7,10,4], [6,8,1,5], [7,9,2,6], [8,10,3,7], [9,1,4,8], [10,2,5,9]]
 
     const getSessionCards = (array) => {
-        var sessionCards = [];
-        var retiredCards = [];
-        var retired = 0
-        array.forEach((element, index) => {
-            if (element.box == 0 || boxes[setSession-1].includes(element.box)){
-                sessionCards.push(element);
-            }
-            if (element.box == 12) {
-                retiredCards.push(element);
-                retired += 1;
-            }
-        })
-        if (array.length * 0.75 <= retired) {
-            for(let i = 0; i < array.length * 0.4; i++) {
-                var random = Math.floor(Math.random()*retiredCards.length)
-                var card = retiredCards[random]
-                db.transaction((tx) => {
-                    tx.executeSql(
-                        "update cards set box=0, stage=4 where id=?", [card.id]
-                    )
-                })
-                retiredCards.splice(random, 1)
-            }
-        }
+        var sessionCards = array;
+
         var selected = Math.floor(Math.random()*sessionCards.length)
         setCurCard(sessionCards[selected])
         sessionCards.splice(selected, 1)
@@ -61,23 +37,24 @@ export default function PlaySet({navigation, route}) {
     }
 
     useEffect(() => {
+        var sets = "("
+        sets = sets.concat("?") 
+        for (var i = 1; i < setID.length; i++) {
+            sets = sets.concat(", ?")
+        }
+        sets = sets.concat(");")
+        console.log(sets)
         db.transaction((tx) => {
           tx.executeSql(
-              "select * from cards where setID in (?);", [setID], (_, { rows: {_array} }) => {
+              "select * from cards where setID in " + sets, setID, (_, { rows: {_array} }) => {
                 getSessionCards(_array)
               }, (t, error) => {
-                (error);
+                console.log(error);
             }
           );  
-          var updateSetSession = ((setSession + 1)==11 ? 1 : (setSession + 1))
-          tx.executeSql(
-            "update sets set session=? where id=?;", [updateSetSession, setID], () => {}, 
-            (t, error) => {
-              console.log(error);
-            }
-            );  
         })
-        navigation.setOptions({title:setName})
+
+        navigation.setOptions({title:'MixSet'})
     }, [])
 
     const getNextCard = () => {
@@ -96,21 +73,6 @@ export default function PlaySet({navigation, route}) {
 
     const onThumbsUp = () => {
         db.transaction((tx) => {
-            if (curCard.stage >= 4){
-                tx.executeSql(
-                    "update cards set box=12, stage=0 where id=?;", [curCard.id]
-                )
-            }
-            else if (curCard.box == 0){
-                tx.executeSql(
-                    "update cards set box=? where id=?;", [setSession, curCard.id]
-                )
-            }
-            else {
-                tx.executeSql(
-                    "update cards set stage=stage+1 where id=?;", [curCard.id]
-                )
-            }
             tx.executeSql(
                 "update cards set correct=correct+1 where id=?", [curCard.id]
             )
@@ -160,16 +122,6 @@ export default function PlaySet({navigation, route}) {
         setFlip(false)
     }
 
-    const onFlagToggle = (curFlag) => {
-        db.transaction((tx) => {
-            tx.executeSql(
-                "update cards set flagged=? where id=?;", [curFlag == 0 ? 1 : 0, curCard.id], () => {}, (t,error) => {
-                    console.log(error)
-                }
-            )
-        })
-    }
-
     return(
         <View style={{flex:1, width:'100%', height:'100%', flexDirection:'column', alignItems:'center'}}>
             <FlingGestureHandler
@@ -198,21 +150,12 @@ export default function PlaySet({navigation, route}) {
                     <View style={styles.cardBack}>
                     { curCard != null ?
                                     flip ?
-                                        <View style={{}}>
-                                            <Pressable key={flagged} onPress={() => {onFlagToggle(curCard.flagged); curCard.flagged = (curCard.flagged == 0 ? 1 : 0); toggleFlagged(!flagged)}} style={{marginTop:'-1.5%', marginLeft:'-1.5%'}}>
-                                                {curCard.flagged == 1 ?
-                                                    <Ionicons name="bookmark" size={50} color="red" />
-                                                    :
-                                                    <Ionicons name="bookmark-outline" size={50} color="red" />
-                                                }
-                                            </Pressable>
-                                        <Text style={{alignSelf:'center'}}>{curCard.face}</Text>
-                                        <Text style={{alignSelf:'center', marginTop:'50%'}}>{curCard.back}</Text>
+                                        <View>
+                                        <Text>{curCard.face}</Text>
+                                        <Text>{curCard.back}</Text>
                                         </View>
                                         :
-                                        <View style={{height:'100%', justifyContent:'center', alignItems:'center'}}>
-                                            <Text style={{}}>{curCard.face}</Text>
-                                        </View>
+                                        <Text style={{}}>{curCard.face}</Text>
                                         :
                                     <Text> Loading </Text>
                                 }
@@ -265,6 +208,8 @@ const styles = StyleSheet.create({
         marginVertical:10,
         backgroundColor:'#fcfcfc', 
         borderColor:'#dbdbdb', 
+        alignItems:'center', 
+        justifyContent:'center', 
         elevation: 2,
 
     },
